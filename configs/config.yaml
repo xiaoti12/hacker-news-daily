@@ -1,0 +1,16 @@
+ai:
+  base_url: "https://api.openai.com/v1"
+  api_key: ""
+  model: "gpt-4o"
+  max_tokens: 4000
+
+telegram:
+  bot_token: ""
+  chat_id: ""
+
+scheduler:
+  cron: "0 9 * * *"  # 每天上午9点执行
+
+hacker_news:
+  timeout: 30  # seconds
+  max_stories: 10
