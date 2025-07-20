@@ -18,6 +18,7 @@ type Config struct {
 	Telegram struct {
 		BotToken string `yaml:"bot_token"`
 		ChatID   string `yaml:"chat_id"`
+		ProxyURL string `yaml:"proxy_url"`
 	} `yaml:"telegram"`
 
 	Scheduler struct {

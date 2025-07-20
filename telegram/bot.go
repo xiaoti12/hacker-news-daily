@@ -3,6 +3,8 @@ package telegram
 import (
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -14,10 +16,34 @@ type Bot struct {
 	chatID int64
 }
 
-func NewBot(token, chatIDStr string) (*Bot, error) {
-	bot, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create telegram bot: %w", err)
+func NewBot(token, chatIDStr, proxyURL string) (*Bot, error) {
+	var bot *tgbotapi.BotAPI
+	var err error
+
+	// 如果配置了代理，使用代理创建 bot
+	if proxyURL != "" {
+		proxyURLParsed, err := url.Parse(proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy URL: %w", err)
+		}
+
+		client := &http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(proxyURLParsed),
+			},
+		}
+
+		bot, err = tgbotapi.NewBotAPIWithClient(token, tgbotapi.APIEndpoint, client)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create telegram bot with proxy: %w", err)
+		}
+
+		log.Printf("Telegram bot using proxy: %s", proxyURL)
+	} else {
+		bot, err = tgbotapi.NewBotAPI(token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create telegram bot: %w", err)
+		}
 	}
 
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)

@@ -7,6 +7,7 @@ ai:
 telegram:
   bot_token: ""
   chat_id: ""
+  proxy_url: "socks5://127.0.0.1:7890"
 
 scheduler:
   cron: "0 9 * * *"  # 每天上午9点执行
