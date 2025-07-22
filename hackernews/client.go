@@ -32,18 +32,7 @@ func (c *Client) GetTopStoriesByDate(date string, maxStories int) ([]Story, erro
 	url := fmt.Sprintf("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&numericFilters=created_at_i>%d,created_at_i<%d&hitsPerPage=%d",
 		getTimestampForDate(date), getTimestampForDate(date)+86400, maxStories)
 
-	var response struct {
-		Hits []struct {
-			ObjectID    string `json:"objectID"`
-			Title       string `json:"title"`
-			URL         string `json:"url"`
-			Points      int    `json:"points"`
-			Author      string `json:"author"`
-			CreatedAtI  int64  `json:"created_at_i"`
-			StoryText   string `json:"story_text"`
-			NumComments int    `json:"num_comments"`
-		} `json:"hits"`
-	}
+	var response TopStoriesResponse
 
 	resp, err := c.httpClient.R().
 		SetResult(&response).

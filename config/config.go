@@ -8,27 +8,32 @@ import (
 )
 
 type Config struct {
-	AI struct {
-		BaseURL   string `yaml:"base_url"`
-		APIKey    string `yaml:"api_key"`
-		Model     string `yaml:"model"`
-		MaxTokens int    `yaml:"max_tokens"`
-	} `yaml:"ai"`
+	AI         AIConfig         `yaml:"ai"`
+	Telegram   TelegramConfig   `yaml:"telegram"`
+	HackerNews HackerNewsConfig `yaml:"hacker_news"`
+	Scheduler  SchedulerConfig  `yaml:"scheduler"`
+}
 
-	Telegram struct {
-		BotToken string `yaml:"bot_token"`
-		ChatID   string `yaml:"chat_id"`
-		ProxyURL string `yaml:"proxy_url"`
-	} `yaml:"telegram"`
+type AIConfig struct {
+	BaseURL   string `yaml:"base_url"`
+	APIKey    string `yaml:"api_key"`
+	Model     string `yaml:"model"`
+	MaxTokens int    `yaml:"max_tokens"`
+}
 
-	Scheduler struct {
-		Cron string `yaml:"cron"`
-	} `yaml:"scheduler"`
+type TelegramConfig struct {
+	BotToken string `yaml:"bot_token"`
+	ChatID   string `yaml:"chat_id"`
+	ProxyURL string `yaml:"proxy_url"`
+}
 
-	HackerNews struct {
-		Timeout    int `yaml:"timeout"`
-		MaxStories int `yaml:"max_stories"`
-	} `yaml:"hacker_news"`
+type HackerNewsConfig struct {
+	Timeout    int `yaml:"timeout"`
+	MaxStories int `yaml:"max_stories"`
+}
+
+type SchedulerConfig struct {
+	Cron string `yaml:"cron"`
 }
 
 func Load(configPath string) (*Config, error) {
