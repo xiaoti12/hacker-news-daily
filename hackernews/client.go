@@ -18,7 +18,7 @@ type Client struct {
 func NewClient(timeout int) *Client {
 	client := resty.New().
 		SetTimeout(time.Duration(timeout)*time.Second).
-		SetHeader("User-Agent", "HackerNews-Daily-Bot/1.0")
+		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
 
 	return &Client{
 		httpClient: client,
@@ -29,13 +29,17 @@ func NewClient(timeout int) *Client {
 // GetTopStoriesByDate 获取指定日期的热门故事
 func (c *Client) GetTopStoriesByDate(date string, maxStories int) ([]Story, error) {
 	// 使用 HN 的搜索 API 获取指定日期的热门故事
-	url := fmt.Sprintf("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&numericFilters=created_at_i>%d,created_at_i<%d&hitsPerPage=%d",
-		getTimestampForDate(date), getTimestampForDate(date)+86400, maxStories)
+	url := "https://hn.algolia.com/api/v1/search_by_date"
 
 	var response TopStoriesResponse
 
 	resp, err := c.httpClient.R().
 		SetResult(&response).
+		SetQueryParams(map[string]string{
+			"tags":           "front_page",
+			"numericFilters": fmt.Sprintf("created_at_i>%d,created_at_i<%d", getTimestampForDate(date), getTimestampForDate(date)+86400),
+			"hitsPerPage":    fmt.Sprintf("%d", maxStories),
+		}).
 		Get(url)
 
 	if err != nil {
@@ -83,6 +87,7 @@ func (c *Client) GetStoryWithComments(storyID int) (*Story, []Comment, error) {
 	}
 
 	// 获取评论
+	// TODO 可以改成goroutine并发
 	comments := make([]Comment, 0)
 	if len(story.Kids) > 0 {
 		// 限制评论数量，避免请求过多
