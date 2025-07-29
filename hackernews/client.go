@@ -5,6 +5,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -87,7 +88,6 @@ func (c *Client) GetStoryWithComments(storyID int) (*Story, []Comment, error) {
 	}
 
 	// 获取评论
-	// TODO 可以改成goroutine并发
 	comments := make([]Comment, 0)
 	if len(story.Kids) > 0 {
 		// 限制评论数量，避免请求过多
@@ -96,11 +96,8 @@ func (c *Client) GetStoryWithComments(storyID int) (*Story, []Comment, error) {
 			story.Kids = story.Kids[:maxComments]
 		}
 
-		for _, kidID := range story.Kids {
-			if comment, err := c.getComment(kidID, 2); err == nil && comment != nil {
-				comments = append(comments, *comment)
-			}
-		}
+		// 使用并发获取顶级评论
+		comments = c.getCommentsParallel(story.Kids, 2)
 	}
 
 	return &story, comments, nil
@@ -140,14 +137,47 @@ func (c *Client) getComment(commentID int, maxDepth int) (*Comment, error) {
 			comment.Kids = comment.Kids[:maxChildren]
 		}
 
-		for _, kidID := range comment.Kids {
-			if child, err := c.getComment(kidID, maxDepth-1); err == nil && child != nil {
-				comment.Children = append(comment.Children, *child)
-			}
-		}
+		// 使用并发获取子评论
+		comment.Children = c.getCommentsParallel(comment.Kids, maxDepth-1)
 	}
 
 	return &comment, nil
+}
+
+// getCommentsParallel 并发获取多个评论
+func (c *Client) getCommentsParallel(commentIDs []int, maxDepth int) []Comment {
+	if len(commentIDs) == 0 {
+		return nil
+	}
+
+	// 使用 channel 收集结果
+	commentChan := make(chan Comment, len(commentIDs))
+	var wg sync.WaitGroup
+
+	// 启动 goroutine 并发获取评论
+	for _, commentID := range commentIDs {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			if comment, err := c.getComment(id, maxDepth); err == nil && comment != nil {
+				commentChan <- *comment
+			}
+		}(commentID)
+	}
+
+	// 等待所有 goroutine 完成
+	go func() {
+		wg.Wait()
+		close(commentChan)
+	}()
+
+	// 收集结果
+	var comments []Comment
+	for comment := range commentChan {
+		comments = append(comments, comment)
+	}
+
+	return comments
 }
 
 // GetStoryContent 获取故事完整内容（包括正文和评论）
