@@ -10,7 +10,7 @@ telegram:
   proxy_url: "socks5://127.0.0.1:7890"
 
 scheduler:
-  cron: "0 9 * * *"  # 每天上午9点执行
+  cron: "0 18 * * * *"  # 每天18:00:00执行
 
 hacker_news:
   timeout: 30  # seconds

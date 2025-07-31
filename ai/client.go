@@ -110,7 +110,7 @@ func (c *Client) CreateDailySummary(storySummaries string, date string) (string,
 - 为技术从业者提供有价值的信息摘要
 
 输出要求：
-- 使用 Markdown 格式
+- 使用连贯的文字和段落，避免使用markdown格式
 - 以日期开头，简要介绍当日要点
 - 按重要性和相关性组织内容
 - 语言简洁明了，富有洞察力
