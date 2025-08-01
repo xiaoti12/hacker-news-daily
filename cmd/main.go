@@ -42,11 +42,13 @@ func main() {
 	// 创建主任务
 	job := func() error {
 		date := *dateFlag
-		if date == "" {
-			date = time.Now().Format("2006-01-02")
-		}
+		// date为空时，GetTopStoriesByDate会自动获取过去24小时的内容
 
-		log.Printf("Processing Hacker News daily summary for date: %s", date)
+		if date == "" {
+			log.Printf("Processing Hacker News daily summary for the last 24 hours")
+		} else {
+			log.Printf("Processing Hacker News daily summary for date: %s", date)
+		}
 
 		return processDailySummary(hnClient, aiClient, tgBot, date, cfg.HackerNews.MaxStories)
 	}
@@ -80,18 +82,19 @@ func main() {
 
 func processDailySummary(hnClient *hackernews.Client, aiClient *ai.Client, tgBot *telegram.Bot, date string, maxStories int) error {
 	// 1. 获取热门故事
-	log.Printf("Fetching top stories for %s...", date)
+	log.Println("Fetching top stories")
+
 	stories, err := hnClient.GetTopStoriesByDate(date, maxStories)
 	if err != nil {
 		return fmt.Errorf("failed to get top stories: %w", err)
 	}
 
 	if len(stories) == 0 {
-		log.Printf("No stories found for date: %s", date)
+		log.Println("No stories found")
 		return nil
 	}
 
-	log.Printf("Found %d stories for %s", len(stories), date)
+	log.Printf("Found %d top stories", len(stories))
 
 	// 2. 获取每个故事的详细内容
 	storyContents := make([]string, 0, len(stories))
@@ -137,6 +140,6 @@ func processDailySummary(hnClient *hackernews.Client, aiClient *ai.Client, tgBot
 		return fmt.Errorf("failed to send summary to telegram: %w", err)
 	}
 
-	log.Printf("Successfully processed and sent daily summary for %s", date)
+	log.Println("Successfully processed and sent daily summary")
 	return nil
 }

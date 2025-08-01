@@ -8,13 +8,27 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestClientIntegration(t *testing.T) {
+func TestGetTopStoriesByDate(t *testing.T) {
 	client := NewClient(30)
 
 	stories, err := client.GetTopStoriesByDate(time.Now().Format("2006-01-02"), 5)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, stories)
 
+	if len(stories) > 0 {
+		story := &stories[0]
+		storyStr, _ := json.MarshalIndent(story, "", "  ")
+		t.Logf("%s", storyStr)
+	}
+}
+func TestGetTopStoriesLast24Hours(t *testing.T) {
+	client := NewClient(30)
+
+	stories, err := client.GetTopStoriesLast24Hours(5)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, stories)
+
+	t.Logf("获取到 %d 条过去24小时的热门故事", len(stories))
 	if len(stories) > 0 {
 		story := &stories[0]
 		storyStr, _ := json.MarshalIndent(story, "", "  ")
