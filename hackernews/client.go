@@ -27,31 +27,22 @@ func NewClient(timeout int) *Client {
 	}
 }
 
-// GetTopStoriesLast24Hours 获取过去24小时的热门故事
-func (c *Client) GetTopStoriesLast24Hours(maxStories int) ([]Story, error) {
-	now := time.Now()
-	startTime := now.Add(-24 * time.Hour).Unix()
-	endTime := now.Unix()
-
-	return c.getTopStoriesByTime(startTime, endTime, maxStories)
-}
-
-// GetTopStoriesByDate 获取指定日期的热门故事，如果date为空则获取过去24小时的内容
+// GetTopStoriesByDate 获取指定日期的热门故事
 func (c *Client) GetTopStoriesByDate(date string, maxStories int) ([]Story, error) {
 	// 如果传入空字符串，则获取过去24小时的内容
 	if date == "" {
-		return c.GetTopStoriesLast24Hours(maxStories)
+		date = time.Now().Format("2006-01-02")
 	}
 
-	startTime := getTimestampForDate(date)
-	endTime := startTime + 24*60*60 // 24小时后
-	if startTime <= 0 || endTime <= 0 {
-		return nil, fmt.Errorf("invalid date provided: %s", date)
+	endTime := getTimeForDate(date)
+	startTime := endTime.Add(-24 * time.Hour)
+	if startTime.IsZero() || endTime.IsZero() {
+		return nil, fmt.Errorf("invalid date format: %s", date)
 	}
 	return c.getTopStoriesByTime(startTime, endTime, maxStories)
 }
 
-func (c *Client) getTopStoriesByTime(startTime, endTime int64, maxStories int) ([]Story, error) {
+func (c *Client) getTopStoriesByTime(startTime, endTime time.Time, maxStories int) ([]Story, error) {
 	// 使用 HN 的搜索 API 获取指定时间段的热门故事
 	url := "https://hn.algolia.com/api/v1/search_by_date"
 
@@ -61,7 +52,7 @@ func (c *Client) getTopStoriesByTime(startTime, endTime int64, maxStories int) (
 		SetResult(&response).
 		SetQueryParams(map[string]string{
 			"tags":           "front_page",
-			"numericFilters": fmt.Sprintf("created_at_i>%d,created_at_i<%d", startTime, endTime),
+			"numericFilters": fmt.Sprintf("created_at_i>%d,created_at_i<%d", startTime.Unix(), endTime.Unix()),
 			"hitsPerPage":    fmt.Sprintf("%d", maxStories),
 		}).
 		Get(url)
@@ -251,12 +242,12 @@ func (c *Client) GetStoryContent(story Story) (string, error) {
 
 // 辅助函数
 
-func getTimestampForDate(date string) int64 {
+func getTimeForDate(date string) time.Time {
 	t, err := time.Parse("2006-01-02", date)
 	if err != nil {
-		return time.Now().Unix()
+		return time.Now()
 	}
-	return t.Unix()
+	return t
 }
 
 func parseInt(s string) int {

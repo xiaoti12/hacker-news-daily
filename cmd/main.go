@@ -45,6 +45,7 @@ func main() {
 		// date为空时，GetTopStoriesByDate会自动获取过去24小时的内容
 
 		if date == "" {
+			date = time.Now().Format("2006-01-02")
 			log.Printf("Processing Hacker News daily summary for the last 24 hours")
 		} else {
 			log.Printf("Processing Hacker News daily summary for date: %s", date)

@@ -21,20 +21,6 @@ func TestGetTopStoriesByDate(t *testing.T) {
 		t.Logf("%s", storyStr)
 	}
 }
-func TestGetTopStoriesLast24Hours(t *testing.T) {
-	client := NewClient(30)
-
-	stories, err := client.GetTopStoriesLast24Hours(5)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, stories)
-
-	t.Logf("获取到 %d 条过去24小时的热门故事", len(stories))
-	if len(stories) > 0 {
-		story := &stories[0]
-		storyStr, _ := json.MarshalIndent(story, "", "  ")
-		t.Logf("%s", storyStr)
-	}
-}
 
 // BenchmarkGetCommentsParallel 测试并发获取评论的性能
 func BenchmarkGetCommentsParallel(b *testing.B) {
