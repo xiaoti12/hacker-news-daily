@@ -7,9 +7,8 @@ type Story struct {
 	Score         int    `json:"score"`
 	By            string `json:"by"`
 	Time          int64  `json:"time"`
-	Type          string `json:"type"`
 	Text          string `json:"text"`
-	Kids          []int  `json:"kids"`
+	Kids          []int  `json:"kids"` // 评论ID列表
 	HackerNewsURL string `json:"hacker_news_url"`
 }
 
