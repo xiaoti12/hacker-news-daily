@@ -144,6 +144,7 @@ func (c *Client) getComment(commentID int, maxDepth int) (*Comment, error) {
 		return nil, nil
 	}
 
+	// TODO 子评论数设为配置项
 	// 获取子评论（限制数量）
 	if len(comment.Kids) > 0 && maxDepth > 1 {
 		maxChildren := 5 // 限制子评论数量
