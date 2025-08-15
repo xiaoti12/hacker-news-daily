@@ -9,7 +9,7 @@ import (
 )
 
 func TestGetTopStoriesByDate(t *testing.T) {
-	client := NewClient(30)
+	client := NewClient(30, 5, 5)
 
 	stories, err := client.GetTopStoriesByDate(time.Now().Format("2006-01-02"), 5)
 	assert.NoError(t, err)
@@ -24,7 +24,7 @@ func TestGetTopStoriesByDate(t *testing.T) {
 
 // BenchmarkGetCommentsParallel 测试并发获取评论的性能
 func BenchmarkGetCommentsParallel(b *testing.B) {
-	client := NewClient(30)
+	client := NewClient(30, 5, 5)
 
 	// 使用一个有很多评论的故事ID进行测试
 	storyID := 38905019
@@ -57,7 +57,7 @@ func BenchmarkGetCommentsParallel(b *testing.B) {
 
 // TestGetCommentsParallelVsSequential 比较并发和串行获取评论的性能
 func TestGetCommentsParallelVsSequential(t *testing.T) {
-	client := NewClient(30)
+	client := NewClient(30, 5, 5)
 
 	// 使用一个有评论的故事ID
 	storyID := 38905019
@@ -110,7 +110,7 @@ func TestGetCommentsParallelVsSequential(t *testing.T) {
 
 // TestGetStoryContent 测试GetStoryContent函数
 func TestGetStoryContent(t *testing.T) {
-	client := NewClient(30)
+	client := NewClient(30, 5, 5)
 
 	tests := []struct {
 		name     string
@@ -174,7 +174,7 @@ func TestGetStoryContent(t *testing.T) {
 
 // TestGetStoryContentWithComments 测试包含评论的故事内容生成
 func TestGetStoryContentWithComments(t *testing.T) {
-	client := NewClient(30)
+	client := NewClient(30, 5, 5)
 
 	// 使用一个真实的故事ID进行集成测试
 	story := Story{
@@ -244,7 +244,7 @@ func TestCleanHTMLText(t *testing.T) {
 
 // TestGetStoryContentErrorHandling 测试错误处理
 func TestGetStoryContentErrorHandling(t *testing.T) {
-	client := NewClient(1) // 设置很短的超时时间
+	client := NewClient(1, 5, 5) // 设置很短的超时时间
 
 	// 测试无效故事ID的情况
 	story := Story{

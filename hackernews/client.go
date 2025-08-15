@@ -11,12 +11,18 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-type Client struct {
-	httpClient *resty.Client
-	timeout    time.Duration
+type CommentConfig struct {
+	MaxTopLevelComments int
+	MaxChildComments    int
 }
 
-func NewClient(timeout int) *Client {
+type Client struct {
+	httpClient    *resty.Client
+	timeout       time.Duration
+	commentConfig CommentConfig
+}
+
+func NewClient(timeout int, maxTopLevelComments int, maxChildComments int) *Client {
 	client := resty.New().
 		SetTimeout(time.Duration(timeout)*time.Second).
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
@@ -24,6 +30,10 @@ func NewClient(timeout int) *Client {
 	return &Client{
 		httpClient: client,
 		timeout:    time.Duration(timeout) * time.Second,
+		commentConfig: CommentConfig{
+			MaxTopLevelComments: maxTopLevelComments,
+			MaxChildComments:    maxChildComments,
+		},
 	}
 }
 
@@ -105,7 +115,7 @@ func (c *Client) GetStoryWithComments(storyID int) (*Story, []Comment, error) {
 	comments := make([]Comment, 0)
 	if len(story.Kids) > 0 {
 		// 限制评论数量，避免请求过多
-		maxComments := 20
+		maxComments := c.commentConfig.MaxTopLevelComments
 		if len(story.Kids) > maxComments {
 			story.Kids = story.Kids[:maxComments]
 		}
@@ -144,10 +154,9 @@ func (c *Client) getComment(commentID int, maxDepth int) (*Comment, error) {
 		return nil, nil
 	}
 
-	// TODO 子评论数设为配置项
 	// 获取子评论（限制数量）
 	if len(comment.Kids) > 0 && maxDepth > 1 {
-		maxChildren := 5 // 限制子评论数量
+		maxChildren := c.commentConfig.MaxChildComments // 限制子评论数量
 		if len(comment.Kids) > maxChildren {
 			comment.Kids = comment.Kids[:maxChildren]
 		}

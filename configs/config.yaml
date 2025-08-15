@@ -15,3 +15,5 @@ scheduler:
 hacker_news:
   timeout: 30  # seconds
   max_stories: 10
+  max_top_level_comments: 20  # 顶级评论数量限制
+  max_child_comments: 5       # 子评论数量限制

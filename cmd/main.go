@@ -32,7 +32,7 @@ func main() {
 	}
 
 	// 初始化客户端
-	hnClient := hackernews.NewClient(cfg.HackerNews.Timeout)
+	hnClient := hackernews.NewClient(cfg.HackerNews.Timeout, cfg.HackerNews.MaxTopLevelComments, cfg.HackerNews.MaxChildComments)
 	aiClient := ai.NewClient(cfg.AI.BaseURL, cfg.AI.APIKey, cfg.AI.Model, cfg.AI.MaxTokens)
 	tgBot, err := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID, cfg.Telegram.ProxyURL)
 	if err != nil {

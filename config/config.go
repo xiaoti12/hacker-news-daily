@@ -30,8 +30,10 @@ type TelegramConfig struct {
 }
 
 type HackerNewsConfig struct {
-	Timeout    int `yaml:"timeout"`
-	MaxStories int `yaml:"max_stories"`
+	Timeout             int `yaml:"timeout"`
+	MaxStories          int `yaml:"max_stories"`
+	MaxTopLevelComments int `yaml:"max_top_level_comments"`
+	MaxChildComments    int `yaml:"max_child_comments"`
 }
 
 type SchedulerConfig struct {
