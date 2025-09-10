@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -212,7 +211,7 @@ func (b *Bot) SendDailySummaryWithNumbers(summary *hackernews.DailySummaryWithNu
 	// Telegram 消息长度限制为 4096 字符
 	const maxMessageLength = 4000
 
-	title := fmt.Sprintf("🗞️ Hacker News 每日热点 - %s\n\n💡 回复故事编号（如 [1]、[2]）获取详细总结", summary.Date)
+	title := fmt.Sprintf("🗞️ Hacker News 每日热点 - %s\n\n💡 回复故事编号（如 1、2、3）获取详细总结", summary.Date)
 
 	// 构建带编号的故事列表
 	var storiesBuilder strings.Builder
@@ -341,39 +340,21 @@ func (b *Bot) processMessages(updates tgbotapi.UpdatesChannel) {
 
 // HandleUserMessage 处理用户消息
 func (b *Bot) HandleUserMessage(update tgbotapi.Update) {
-	message := update.Message.Text
+	message := strings.TrimSpace(update.Message.Text)
 	log.Printf("Received message: %s", message)
 
-	// 使用正则表达式匹配故事编号，格式如 [1]、[2] 等
-	re := regexp.MustCompile(`^\[(\d+)\]$`)
-	matches := re.FindStringSubmatch(message)
+	// 尝试解析为纯数字
+	if storyNumber, err := strconv.Atoi(message); err == nil {
+		// 用户发送了纯数字编号
+		b.handleStoryRequest(update, storyNumber, message)
+		return
+	}
 
-	if len(matches) == 2 {
-		// 用户发送了故事编号
-		storyNumber, err := strconv.Atoi(matches[1])
-		if err != nil {
-			b.sendReply(update.Message, "❌ 无效的故事编号格式")
-			return
-		}
-
-		// 获取今天的日期
-		today := time.Now().Format("2006-01-02")
-
-		// 发送详细总结
-		if err := b.SendDetailedSummary(storyNumber, today); err != nil {
-			log.Printf("Failed to send detailed summary: %v", err)
-			b.sendReply(update.Message, fmt.Sprintf("❌ 获取详细总结失败: %v", err))
-			return
-		}
-
-		// 发送确认消息
-		b.sendReply(update.Message, fmt.Sprintf("✅ 已发送故事 [%d] 的详细总结", storyNumber))
-	} else {
-		// 用户发送了其他消息，发送帮助信息
-		helpMessage := `🤖 Hacker News 每日总结机器人
+	// 用户发送了非数字消息，发送帮助信息
+	helpMessage := `🤖 Hacker News 每日总结机器人
 
 💡 使用方法：
-- 回复故事编号获取详细总结，例如：[1]、[2]、[3]等
+- 回复故事编号获取详细总结，例如：1、2、3
 - 每日18:00会自动推送当日热门故事总结
 
 📝 当前支持的操作：
@@ -381,8 +362,33 @@ func (b *Bot) HandleUserMessage(update tgbotapi.Update) {
 - 自动接收每日热点推送
 
 如有问题请联系管理员。`
-		b.sendReply(update.Message, helpMessage)
+	b.sendReply(update.Message, helpMessage)
+}
+
+// handleStoryRequest 处理故事详细总结请求
+func (b *Bot) handleStoryRequest(update tgbotapi.Update, storyNumber int, _ string) {
+	// 立即发送正在处理的提示信息
+	processingMsg := fmt.Sprintf("🔄 正在为您生成故事 [%d] 的详细总结，请稍候...", storyNumber)
+	if err := b.sendReply(update.Message, processingMsg); err != nil {
+		log.Printf("Failed to send processing message: %v", err)
+		return
 	}
+
+	// 获取今天的日期
+	today := time.Now().Format("2006-01-02")
+
+	// 发送详细总结
+	if err := b.SendDetailedSummary(storyNumber, today); err != nil {
+		log.Printf("Failed to send detailed summary: %v", err)
+		// 发送错误信息
+		errorMsg := fmt.Sprintf("❌ 获取故事 [%d] 的详细总结失败: %v", storyNumber, err)
+		b.sendReply(update.Message, errorMsg)
+		return
+	}
+
+	// 发送完成确认消息
+	completionMsg := fmt.Sprintf("✅ 故事 [%d] 的详细总结已发送完成！", storyNumber)
+	b.sendReply(update.Message, completionMsg)
 }
 
 // sendReply 回复消息
