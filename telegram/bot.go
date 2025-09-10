@@ -5,15 +5,26 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"hacker-news-daily/ai"
+	"hacker-news-daily/hackernews"
 )
 
 type Bot struct {
-	api    *tgbotapi.BotAPI
-	chatID int64
+	api            *tgbotapi.BotAPI
+	chatID         int64
+	aiClient       *ai.Client
+	hnClient       *hackernews.Client
+	storySummaries map[string]*hackernews.DailySummaryWithNumbers // 按日期存储的故事总结
+	mu             sync.RWMutex                                   // 读写锁保护共享数据
+	messageHandler chan tgbotapi.Update                           // 消息处理通道
+	stopHandler    chan struct{}                                   // 停止处理器通道
 }
 
 func NewBot(token, chatIDStr, proxyURL string) (*Bot, error) {
@@ -54,8 +65,11 @@ func NewBot(token, chatIDStr, proxyURL string) (*Bot, error) {
 	log.Printf("Telegram bot authorized on account %s", bot.Self.UserName)
 
 	return &Bot{
-		api:    bot,
-		chatID: chatID,
+		api:            bot,
+		chatID:         chatID,
+		storySummaries: make(map[string]*hackernews.DailySummaryWithNumbers),
+		messageHandler: make(chan tgbotapi.Update, 100),
+		stopHandler:    make(chan struct{}),
 	}, nil
 }
 
@@ -180,4 +194,208 @@ func (b *Bot) sendVeryLongParagraph(paragraph string, maxLength int) error {
 func (b *Bot) SendError(errorMsg string) error {
 	message := fmt.Sprintf("❌ 错误: %s", errorMsg)
 	return b.sendMessage(message)
+}
+
+// SetClients 设置AI和Hacker News客户端
+func (b *Bot) SetClients(aiClient *ai.Client, hnClient *hackernews.Client) {
+	b.aiClient = aiClient
+	b.hnClient = hnClient
+}
+
+// SendDailySummaryWithNumbers 发送带编号的每日总结
+func (b *Bot) SendDailySummaryWithNumbers(summary *hackernews.DailySummaryWithNumbers) error {
+	// 保存总结到内存中供后续查询
+	b.mu.Lock()
+	b.storySummaries[summary.Date] = summary
+	b.mu.Unlock()
+
+	// Telegram 消息长度限制为 4096 字符
+	const maxMessageLength = 4000
+
+	title := fmt.Sprintf("🗞️ Hacker News 每日热点 - %s\n\n💡 回复故事编号（如 [1]、[2]）获取详细总结", summary.Date)
+
+	// 构建带编号的故事列表
+	var storiesBuilder strings.Builder
+	for _, storySummary := range summary.StorySummaries {
+		storiesBuilder.WriteString(fmt.Sprintf("[%d] %s\n\n", storySummary.Number, storySummary.Summary))
+	}
+
+	storiesText := storiesBuilder.String()
+
+	// 如果消息太长，需要分割发送
+	if len(storiesText) <= maxMessageLength-len(title)-20 {
+		message := fmt.Sprintf("%s\n%s", title, storiesText)
+		return b.sendMessage(message)
+	}
+
+	// 发送标题
+	if err := b.sendMessage(title); err != nil {
+		return err
+	}
+
+	// 分割内容发送
+	return b.sendLongMessage(storiesText, maxMessageLength)
+}
+
+// SendDetailedSummary 发送单个故事的详细总结
+func (b *Bot) SendDetailedSummary(storyNumber int, date string) error {
+	// 获取对应的故事总结
+	b.mu.RLock()
+	summary, exists := b.storySummaries[date]
+	b.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("找不到 %s 的故事总结", date)
+	}
+
+	// 查找对应编号的故事
+	var targetStory *hackernews.StoryWithNumber
+	var targetFullStory *hackernews.Story
+	for i, storySummary := range summary.StorySummaries {
+		if storySummary.Number == storyNumber {
+			targetStory = &summary.StorySummaries[i]
+			targetFullStory = &summary.Stories[i]
+			break
+		}
+	}
+
+	if targetStory == nil {
+		return fmt.Errorf("找不到编号为 %d 的故事", storyNumber)
+	}
+
+	// 获取故事的详细内容
+	log.Printf("Fetching detailed content for story %d: %s", targetStory.StoryID, targetStory.Title)
+	content, err := b.hnClient.GetStoryContent(*targetFullStory)
+	if err != nil {
+		return fmt.Errorf("获取故事内容失败: %w", err)
+	}
+
+	// 使用AI生成详细总结
+	log.Printf("Generating detailed summary for story %d", storyNumber)
+	detailedSummary, err := b.aiClient.GenerateDetailedSummary(*targetFullStory, content)
+	if err != nil {
+		return fmt.Errorf("生成详细总结失败: %w", err)
+	}
+
+	// 发送详细总结
+	title := fmt.Sprintf("📖 故事 [%d] 详细总结 - %s", storyNumber, targetStory.Title)
+	
+	// 如果消息太长，分割发送
+	const maxMessageLength = 4000
+	if len(detailedSummary) <= maxMessageLength-len(title)-20 {
+		message := fmt.Sprintf("%s\n\n%s", title, detailedSummary)
+		return b.sendMessage(message)
+	}
+
+	// 发送标题
+	if err := b.sendMessage(title); err != nil {
+		return err
+	}
+
+	// 分割内容发送
+	return b.sendLongMessage(detailedSummary, maxMessageLength)
+}
+
+// StartMessageHandler 启动消息处理器
+func (b *Bot) StartMessageHandler() {
+	log.Println("Starting Telegram message handler...")
+	
+	// 获取更新通道
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := b.api.GetUpdatesChan(u)
+
+	// 启动消息处理协程
+	go b.processMessages(updates)
+}
+
+// StopMessageHandler 停止消息处理器
+func (b *Bot) StopMessageHandler() {
+	log.Println("Stopping Telegram message handler...")
+	close(b.stopHandler)
+}
+
+// processMessages 处理消息
+func (b *Bot) processMessages(updates tgbotapi.UpdatesChannel) {
+	for {
+		select {
+		case update := <-updates:
+			if update.Message == nil {
+				continue
+			}
+
+			// 只处理指定chatID的消息
+			if update.Message.Chat.ID != b.chatID {
+				continue
+			}
+
+			// 处理用户消息
+			go b.HandleUserMessage(update)
+
+		case <-b.stopHandler:
+			return
+		}
+	}
+}
+
+// HandleUserMessage 处理用户消息
+func (b *Bot) HandleUserMessage(update tgbotapi.Update) {
+	message := update.Message.Text
+	log.Printf("Received message: %s", message)
+
+	// 使用正则表达式匹配故事编号，格式如 [1]、[2] 等
+	re := regexp.MustCompile(`^\[(\d+)\]$`)
+	matches := re.FindStringSubmatch(message)
+
+	if len(matches) == 2 {
+		// 用户发送了故事编号
+		storyNumber, err := strconv.Atoi(matches[1])
+		if err != nil {
+			b.sendReply(update.Message, "❌ 无效的故事编号格式")
+			return
+		}
+
+		// 获取今天的日期
+		today := time.Now().Format("2006-01-02")
+
+		// 发送详细总结
+		if err := b.SendDetailedSummary(storyNumber, today); err != nil {
+			log.Printf("Failed to send detailed summary: %v", err)
+			b.sendReply(update.Message, fmt.Sprintf("❌ 获取详细总结失败: %v", err))
+			return
+		}
+
+		// 发送确认消息
+		b.sendReply(update.Message, fmt.Sprintf("✅ 已发送故事 [%d] 的详细总结", storyNumber))
+	} else {
+		// 用户发送了其他消息，发送帮助信息
+		helpMessage := `🤖 Hacker News 每日总结机器人
+
+💡 使用方法：
+- 回复故事编号获取详细总结，例如：[1]、[2]、[3]等
+- 每日18:00会自动推送当日热门故事总结
+
+📝 当前支持的操作：
+- 查看当日故事详细总结
+- 自动接收每日热点推送
+
+如有问题请联系管理员。`
+		b.sendReply(update.Message, helpMessage)
+	}
+}
+
+// sendReply 回复消息
+func (b *Bot) sendReply(message *tgbotapi.Message, text string) error {
+	reply := tgbotapi.NewMessage(message.Chat.ID, text)
+	reply.ReplyToMessageID = message.MessageID
+	reply.ParseMode = tgbotapi.ModeMarkdown
+	reply.DisableWebPagePreview = true
+
+	_, err := b.api.Send(reply)
+	if err != nil {
+		return fmt.Errorf("failed to send reply: %w", err)
+	}
+
+	return nil
 }

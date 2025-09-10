@@ -28,6 +28,20 @@ type DailyStories struct {
 	Stories []Story `json:"stories"`
 }
 
+type DailySummaryWithNumbers struct {
+	Date           string                  `json:"date"`
+	Stories        []Story                 `json:"stories"`
+	StorySummaries []StoryWithNumber       `json:"story_summaries"`
+}
+
+type StoryWithNumber struct {
+	Number  int    `json:"number"`
+	StoryID int    `json:"story_id"`
+	Title   string `json:"title"`
+	Summary string `json:"summary"`
+	Content string `json:"content"`
+}
+
 type TopStoriesResponse struct {
 	Hits []struct {
 		ObjectID    string `json:"objectID"`

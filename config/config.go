@@ -147,5 +147,6 @@ func Load(configPath string) (*Config, error) {
 		config.Telegram.ChatID = chatID
 	}
 
+	
 	return &config, nil
 }

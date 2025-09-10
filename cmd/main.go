@@ -39,6 +39,13 @@ func main() {
 		log.Fatalf("Failed to create telegram bot: %v", err)
 	}
 
+	// 设置Telegram机器人的客户端
+	tgBot.SetClients(aiClient, hnClient)
+
+	// 启动Telegram消息处理器
+	tgBot.StartMessageHandler()
+	defer tgBot.StopMessageHandler()
+
 	// 创建主任务
 	job := func() error {
 		date := *dateFlag
@@ -118,27 +125,21 @@ func processDailySummary(hnClient *hackernews.Client, aiClient *ai.Client, tgBot
 		return fmt.Errorf("no story content retrieved")
 	}
 
-	// 3. 使用 AI 总结故事
-	log.Println("Generating AI summary...")
-	storySummaries, err := aiClient.SummarizeStories(storyContents, date)
+	// 3. 使用 AI 生成带编号的故事总结
+	log.Println("Generating AI summary with numbers...")
+	dailySummaryWithNumbers, err := aiClient.SummarizeStoriesWithNumbers(storyContents, stories, date)
 	if err != nil {
-		return fmt.Errorf("failed to summarize stories: %w", err)
+		return fmt.Errorf("failed to summarize stories with numbers: %w", err)
 	}
 
-	// 4. 创建每日总结
-	dailySummary, err := aiClient.CreateDailySummary(storySummaries, date)
-	if err != nil {
-		return fmt.Errorf("failed to create daily summary: %w", err)
-	}
-
-	// 5. 发送到 Telegram
-	log.Println("Sending summary to Telegram...")
-	if err := tgBot.SendDailySummary(date, dailySummary); err != nil {
+	// 4. 发送到 Telegram (带编号)
+	log.Println("Sending numbered summary to Telegram...")
+	if err := tgBot.SendDailySummaryWithNumbers(dailySummaryWithNumbers); err != nil {
 		// 如果发送失败，尝试发送错误信息
 		if sendErr := tgBot.SendError(fmt.Sprintf("发送每日总结失败: %v", err)); sendErr != nil {
 			log.Printf("Failed to send error message: %v", sendErr)
 		}
-		return fmt.Errorf("failed to send summary to telegram: %w", err)
+		return fmt.Errorf("failed to send numbered summary to telegram: %w", err)
 	}
 
 	log.Println("Successfully processed and sent daily summary")
