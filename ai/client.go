@@ -353,7 +353,7 @@ func (c *Client) isNumberedStoryLine(line string) []int {
 }
 
 // cleanNumberedLine 清理编号行的格式
-func (c *Client) cleanNumberedLine(line string, number int) string {
+func (c *Client) cleanNumberedLine(line string, _ int) string {
 	// 去除编号部分，保留标题和内容
 	parts := strings.SplitN(line, "]", 2)
 	if len(parts) == 2 {

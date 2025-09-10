@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	configPath = flag.String("config", "configs/config.yaml", "配置文件路径")
-	runOnce    = flag.Bool("once", false, "立即执行一次任务")
-	dateFlag   = flag.String("date", "", "指定日期 (YYYY-MM-DD)，默认为今天")
+	configPath   = flag.String("config", "configs/config.yaml", "配置文件路径")
+	runOnce     = flag.Bool("once", false, "立即执行一次任务后退出")
+	sendNow     = flag.Bool("send", false, "启动时立即发送一次消息，然后继续运行支持交互")
+	dateFlag    = flag.String("date", "", "指定日期 (YYYY-MM-DD)，默认为今天")
 )
 
 func main() {
@@ -53,19 +54,36 @@ func main() {
 
 		if date == "" {
 			date = time.Now().Format("2006-01-02")
-			log.Printf("Processing Hacker News daily summary for the last 24 hours")
+			log.Printf("Processing numbered Hacker News daily summary for the last 24 hours")
 		} else {
-			log.Printf("Processing Hacker News daily summary for date: %s", date)
+			log.Printf("Processing numbered Hacker News daily summary for date: %s", date)
 		}
 
 		return processDailySummary(hnClient, aiClient, tgBot, date, cfg.HackerNews.MaxStories)
 	}
 
-	// 如果指定了立即运行，执行一次任务
+	// 如果指定了立即发送，执行一次带编号的消息发送
+	if *sendNow {
+		date := *dateFlag
+		if date == "" {
+			date = time.Now().Format("2006-01-02")
+			log.Printf("Sending numbered Hacker News daily summary for the last 24 hours")
+		} else {
+			log.Printf("Sending numbered Hacker News daily summary for date: %s", date)
+		}
+
+		if err := processDailySummary(hnClient, aiClient, tgBot, date, cfg.HackerNews.MaxStories); err != nil {
+			log.Fatalf("Send execution failed: %v", err)
+		}
+		log.Println("Initial numbered summary sent successfully, bot continues running for interaction...")
+	}
+
+	// 如果指定了立即运行，执行一次任务然后退出
 	if *runOnce {
 		if err := job(); err != nil {
 			log.Fatalf("Job execution failed: %v", err)
 		}
+		log.Println("Once execution completed, exiting...")
 		return
 	}
 
@@ -88,6 +106,7 @@ func main() {
 	log.Println("Shutting down...")
 }
 
+// processDailySummary 处理并发送带编号的每日总结
 func processDailySummary(hnClient *hackernews.Client, aiClient *ai.Client, tgBot *telegram.Bot, date string, maxStories int) error {
 	// 1. 获取热门故事
 	log.Println("Fetching top stories")
@@ -136,12 +155,12 @@ func processDailySummary(hnClient *hackernews.Client, aiClient *ai.Client, tgBot
 	log.Println("Sending numbered summary to Telegram...")
 	if err := tgBot.SendDailySummaryWithNumbers(dailySummaryWithNumbers); err != nil {
 		// 如果发送失败，尝试发送错误信息
-		if sendErr := tgBot.SendError(fmt.Sprintf("发送每日总结失败: %v", err)); sendErr != nil {
+		if sendErr := tgBot.SendError(fmt.Sprintf("发送带编号总结失败: %v", err)); sendErr != nil {
 			log.Printf("Failed to send error message: %v", sendErr)
 		}
 		return fmt.Errorf("failed to send numbered summary to telegram: %w", err)
 	}
 
-	log.Println("Successfully processed and sent daily summary")
+	log.Println("Successfully processed and sent numbered daily summary")
 	return nil
 }
