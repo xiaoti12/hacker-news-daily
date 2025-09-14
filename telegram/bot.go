@@ -23,10 +23,11 @@ type Bot struct {
 	storySummaries map[string]*hackernews.DailySummaryWithNumbers // 按日期存储的故事总结
 	mu             sync.RWMutex                                   // 读写锁保护共享数据
 	messageHandler chan tgbotapi.Update                           // 消息处理通道
-	stopHandler    chan struct{}                                   // 停止处理器通道
+	stopHandler    chan struct{}                                  // 停止处理器通道
+	maxStories     int                                            // 最大故事数量配置
 }
 
-func NewBot(token, chatIDStr, proxyURL string) (*Bot, error) {
+func NewBot(token, chatIDStr, proxyURL string, maxStories int) (*Bot, error) {
 	var bot *tgbotapi.BotAPI
 	var err error
 
@@ -69,6 +70,7 @@ func NewBot(token, chatIDStr, proxyURL string) (*Bot, error) {
 		storySummaries: make(map[string]*hackernews.DailySummaryWithNumbers),
 		messageHandler: make(chan tgbotapi.Update, 100),
 		stopHandler:    make(chan struct{}),
+		maxStories:     maxStories,
 	}, nil
 }
 
@@ -278,7 +280,7 @@ func (b *Bot) SendDetailedSummary(storyNumber int, date string) error {
 
 	// 发送详细总结
 	title := fmt.Sprintf("📖 故事 [%d] 详细总结 - %s", storyNumber, targetStory.Title)
-	
+
 	// 如果消息太长，分割发送
 	const maxMessageLength = 4000
 	if len(detailedSummary) <= maxMessageLength-len(title)-20 {
@@ -298,7 +300,7 @@ func (b *Bot) SendDetailedSummary(storyNumber int, date string) error {
 // StartMessageHandler 启动消息处理器
 func (b *Bot) StartMessageHandler() {
 	log.Println("Starting Telegram message handler...")
-	
+
 	// 获取更新通道
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -343,6 +345,12 @@ func (b *Bot) HandleUserMessage(update tgbotapi.Update) {
 	message := strings.TrimSpace(update.Message.Text)
 	log.Printf("Received message: %s", message)
 
+	// 处理 resend 命令
+	if strings.ToLower(message) == "resend" {
+		b.handleResendRequest(update)
+		return
+	}
+
 	// 尝试解析为纯数字
 	if storyNumber, err := strconv.Atoi(message); err == nil {
 		// 用户发送了纯数字编号
@@ -355,10 +363,12 @@ func (b *Bot) HandleUserMessage(update tgbotapi.Update) {
 
 💡 使用方法：
 - 回复故事编号获取详细总结，例如：1、2、3
+- 发送 "resend" 重新获取过去24小时的热点总结
 - 每日18:00会自动推送当日热门故事总结
 
 📝 当前支持的操作：
 - 查看当日故事详细总结
+- 重新获取过去24小时热点总结
 - 自动接收每日热点推送
 
 如有问题请联系管理员。`
@@ -389,6 +399,98 @@ func (b *Bot) handleStoryRequest(update tgbotapi.Update, storyNumber int, _ stri
 	// 发送完成确认消息
 	completionMsg := fmt.Sprintf("✅ 故事 [%d] 的详细总结已发送完成！", storyNumber)
 	b.sendReply(update.Message, completionMsg)
+}
+
+// handleResendRequest 处理重新发送请求
+func (b *Bot) handleResendRequest(update tgbotapi.Update) {
+	// 立即发送正在处理的提示信息
+	processingMsg := "🔄 正在重新获取过去24小时的热点总结，请稍候..."
+	if err := b.sendReply(update.Message, processingMsg); err != nil {
+		log.Printf("Failed to send processing message: %v", err)
+		return
+	}
+
+	// 获取今天的日期
+	today := time.Now().Format("2006-01-02")
+
+	// 执行重新发送流程
+	if err := b.ResendDailySummary(today); err != nil {
+		log.Printf("Failed to resend daily summary: %v", err)
+		// 发送错误信息
+		errorMsg := fmt.Sprintf("❌ 重新获取热点总结失败: %v", err)
+		b.sendReply(update.Message, errorMsg)
+		return
+	}
+
+	// 发送完成确认消息
+	completionMsg := "✅ 过去24小时的热点总结已重新发送完成！"
+	b.sendReply(update.Message, completionMsg)
+}
+
+// ProcessDailySummary 处理每日总结的核心逻辑
+func (b *Bot) ProcessDailySummary(date string, maxStories int) error {
+	// 检查客户端是否已设置
+	if b.aiClient == nil || b.hnClient == nil {
+		return fmt.Errorf("AI或Hacker News客户端未初始化")
+	}
+
+	// 1. 获取热门故事
+	log.Println("Fetching top stories")
+
+	stories, err := b.hnClient.GetTopStoriesByDate(date, maxStories)
+	if err != nil {
+		return fmt.Errorf("failed to get top stories: %w", err)
+	}
+
+	if len(stories) == 0 {
+		log.Println("No stories found")
+		return nil
+	}
+
+	log.Printf("Found %d top stories", len(stories))
+
+	// 2. 获取每个故事的详细内容
+	storyContents := make([]string, 0, len(stories))
+	for i, story := range stories {
+		log.Printf("Processing story %d/%d: %s", i+1, len(stories), story.Title)
+
+		content, err := b.hnClient.GetStoryContent(story)
+		if err != nil {
+			log.Printf("Failed to get content for story %d: %v", story.ID, err)
+			continue
+		}
+
+		storyContents = append(storyContents, content)
+
+		// 添加延迟避免请求过快
+		time.Sleep(1 * time.Second)
+	}
+
+	if len(storyContents) == 0 {
+		return fmt.Errorf("no story content retrieved")
+	}
+
+	// 3. 使用 AI 生成带编号的故事总结
+	log.Println("Generating AI summary with numbers...")
+	dailySummaryWithNumbers, err := b.aiClient.SummarizeStoriesWithNumbers(storyContents, stories, date)
+	if err != nil {
+		return fmt.Errorf("failed to summarize stories with numbers: %w", err)
+	}
+
+	// 4. 发送到 Telegram (带编号)
+	log.Println("Sending numbered summary to Telegram...")
+	if err := b.SendDailySummaryWithNumbers(dailySummaryWithNumbers); err != nil {
+		return fmt.Errorf("failed to send numbered summary to telegram: %w", err)
+	}
+
+	log.Println("Successfully processed and sent numbered daily summary")
+	return nil
+}
+
+// ResendDailySummary 重新发送每日总结
+func (b *Bot) ResendDailySummary(date string) error {
+	// 使用配置的最大故事数量
+	return b.ProcessDailySummary(date, b.maxStories)
 }
 
 // sendReply 回复消息
