@@ -2,42 +2,51 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 
-	"gopkg.in/yaml.v3"
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
-	AI         AIConfig         `yaml:"ai"`
-	Telegram   TelegramConfig   `yaml:"telegram"`
-	HackerNews HackerNewsConfig `yaml:"hacker_news"`
-	Scheduler  SchedulerConfig  `yaml:"scheduler"`
+	AI         AIConfig         `mapstructure:"ai"`
+	Telegram   TelegramConfig   `mapstructure:"telegram"`
+	HackerNews HackerNewsConfig `mapstructure:"hacker_news"`
+	Scheduler  SchedulerConfig  `mapstructure:"scheduler"`
 }
 
+// 全局配置实例和互斥锁
+var (
+	globalConfig *Config
+	configMutex  sync.RWMutex
+)
+
 type AIConfig struct {
-	BaseURL   string `yaml:"base_url"`
-	APIKey    string `yaml:"api_key"`
-	Model     string `yaml:"model"`
-	MaxTokens int    `yaml:"max_tokens"`
+	BaseURL   string `mapstructure:"base_url"`
+	APIKey    string `mapstructure:"api_key"`
+	Model     string `mapstructure:"model"`
+	MaxTokens int    `mapstructure:"max_tokens"`
 }
 
 type TelegramConfig struct {
-	BotToken string `yaml:"bot_token"`
-	ChatID   string `yaml:"chat_id"`
-	ProxyURL string `yaml:"proxy_url"`
+	BotToken string `mapstructure:"bot_token"`
+	ChatID   string `mapstructure:"chat_id"`
+	ProxyURL string `mapstructure:"proxy_url"`
 }
 
 type HackerNewsConfig struct {
-	Timeout             int `yaml:"timeout"`
-	MaxStories          int `yaml:"max_stories"`
-	MaxTopLevelComments int `yaml:"max_top_level_comments"`
-	MaxChildComments    int `yaml:"max_child_comments"`
+	Timeout             int `mapstructure:"timeout"`
+	MaxStories          int `mapstructure:"max_stories"`
+	MaxTopLevelComments int `mapstructure:"max_top_level_comments"`
+	MaxChildComments    int `mapstructure:"max_child_comments"`
 }
 
 type SchedulerConfig struct {
-	Cron string `yaml:"cron"`
+	Cron string `mapstructure:"cron"`
 }
 
 // findProjectRoot 查找项目根目录
@@ -119,6 +128,7 @@ func resolveConfigPath(configPath string) (string, error) {
 	return resolvedPath, nil
 }
 
+// Load 加载配置文件并启动热加载监听
 func Load(configPath string) (*Config, error) {
 	// 解析配置文件路径
 	resolvedPath, err := resolveConfigPath(configPath)
@@ -126,26 +136,77 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to resolve config path: %w", err)
 	}
 
-	data, err := os.ReadFile(resolvedPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %s: %w", resolvedPath, err)
+	// 创建viper实例
+	v := viper.New()
+
+	// 设置配置文件路径
+	v.SetConfigFile(resolvedPath)
+
+	// 设置环境变量支持
+	v.AutomaticEnv()
+	v.SetEnvPrefix("HND") // Hacker News Daily
+
+	// 设置环境变量映射
+	v.BindEnv("ai.api_key", "AI_API_KEY")
+	v.BindEnv("telegram.bot_token", "TELEGRAM_BOT_TOKEN")
+	v.BindEnv("telegram.chat_id", "TELEGRAM_CHAT_ID")
+
+	// 读取配置文件
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
+	// 解析配置到结构体
 	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := v.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// 从环境变量覆盖敏感配置
-	if apiKey := os.Getenv("AI_API_KEY"); apiKey != "" {
-		config.AI.APIKey = apiKey
-	}
-	if botToken := os.Getenv("TELEGRAM_BOT_TOKEN"); botToken != "" {
-		config.Telegram.BotToken = botToken
-	}
-	if chatID := os.Getenv("TELEGRAM_CHAT_ID"); chatID != "" {
-		config.Telegram.ChatID = chatID
-	}
+	// 设置全局配置
+	configMutex.Lock()
+	globalConfig = &config
+	configMutex.Unlock()
+
+	// 启动配置文件热加载监听
+	go watchConfig(v)
 
 	return &config, nil
+}
+
+// GetConfig 获取当前配置（线程安全）
+func GetConfig() *Config {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+	return globalConfig
+}
+
+// watchConfig 监听配置文件变化并重新加载
+func watchConfig(v *viper.Viper) {
+	// 设置配置文件变化回调
+	v.OnConfigChange(func(e fsnotify.Event) {
+		log.Printf("Config file changed: %s", e.Name)
+
+		// 重新读取配置
+		if err := v.ReadInConfig(); err != nil {
+			log.Printf("Failed to reload config: %v", err)
+			return
+		}
+
+		// 解析新的配置
+		var newConfig Config
+		if err := v.Unmarshal(&newConfig); err != nil {
+			log.Printf("Failed to unmarshal reloaded config: %v", err)
+			return
+		}
+
+		// 更新全局配置
+		configMutex.Lock()
+		globalConfig = &newConfig
+		configMutex.Unlock()
+
+		log.Println("Configuration reloaded successfully")
+	})
+
+	// 开始监听配置文件变化
+	v.WatchConfig()
 }
