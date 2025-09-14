@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"hacker-news-daily/ai"
-	"hacker-news-daily/config"
+	"hacker-news-daily/configs"
 	"hacker-news-daily/hackernews"
 	"hacker-news-daily/scheduler"
 	"hacker-news-daily/telegram"
