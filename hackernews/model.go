@@ -29,9 +29,9 @@ type DailyStories struct {
 }
 
 type DailySummaryWithNumbers struct {
-	Date           string                  `json:"date"`
-	Stories        []Story                 `json:"stories"`
-	StorySummaries []StoryWithNumber       `json:"story_summaries"`
+	Date           string            `json:"date"`
+	Stories        []Story           `json:"stories"`
+	StorySummaries []StoryWithNumber `json:"story_summaries"`
 }
 
 type StoryWithNumber struct {

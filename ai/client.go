@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
 	"hacker-news-daily/hackernews"
+
+	"github.com/go-resty/resty/v2"
 )
 
 type Client struct {
@@ -176,7 +177,7 @@ func (c *Client) SummarizeStoriesWithNumbers(stories []string, storiesInfo []hac
 	// 构建包含故事信息的prompt
 	var storiesWithInfo []string
 	for i, story := range stories {
-		storyInfo := fmt.Sprintf("故事 %d:\n标题: %s\nURL: %s\n分数: %d\n作者: %s\n内容:\n%s", 
+		storyInfo := fmt.Sprintf("故事 %d:\n标题: %s\nURL: %s\n分数: %d\n作者: %s\n内容:\n%s",
 			i+1, storiesInfo[i].Title, storiesInfo[i].URL, storiesInfo[i].Score, storiesInfo[i].By, story)
 		storiesWithInfo = append(storiesWithInfo, storyInfo)
 	}
@@ -290,10 +291,10 @@ URL: %s
 func (c *Client) parseNumberedSummaries(summaryText string, stories []hackernews.Story) []hackernews.StoryWithNumber {
 	lines := strings.Split(summaryText, "\n")
 	var storySummaries []hackernews.StoryWithNumber
-	
+
 	var currentSummary strings.Builder
 	var currentNumber int
-	
+
 	for _, line := range lines {
 		// 检查是否是新的故事编号行
 		if matches := c.isNumberedStoryLine(line); matches != nil {
@@ -309,7 +310,7 @@ func (c *Client) parseNumberedSummaries(summaryText string, stories []hackernews
 					})
 				}
 			}
-			
+
 			// 开始新故事
 			currentNumber = matches[0]
 			currentSummary.Reset()
@@ -323,7 +324,7 @@ func (c *Client) parseNumberedSummaries(summaryText string, stories []hackernews
 			}
 		}
 	}
-	
+
 	// 添加最后一个故事
 	if currentNumber > 0 && currentSummary.Len() > 0 && currentNumber-1 < len(stories) {
 		storySummaries = append(storySummaries, hackernews.StoryWithNumber{
@@ -334,7 +335,7 @@ func (c *Client) parseNumberedSummaries(summaryText string, stories []hackernews
 			Content: "",
 		})
 	}
-	
+
 	return storySummaries
 }
 
