@@ -99,7 +99,8 @@ func (b *Bot) SendDailySummary(date, summary string) error {
 // sendMessage 发送单条消息
 func (b *Bot) sendMessage(text string) error {
 	msg := tgbotapi.NewMessage(b.chatID, text)
-	msg.ParseMode = tgbotapi.ModeMarkdown
+	// 移除Markdown格式设置，避免解析错误
+	// msg.ParseMode = tgbotapi.ModeMarkdown
 	msg.DisableWebPagePreview = true
 
 	_, err := b.api.Send(msg)
@@ -497,7 +498,8 @@ func (b *Bot) ResendDailySummary(date string) error {
 func (b *Bot) sendReply(message *tgbotapi.Message, text string) error {
 	reply := tgbotapi.NewMessage(message.Chat.ID, text)
 	reply.ReplyToMessageID = message.MessageID
-	reply.ParseMode = tgbotapi.ModeMarkdown
+	// 移除Markdown格式设置，避免解析错误
+	// reply.ParseMode = tgbotapi.ModeMarkdown
 	reply.DisableWebPagePreview = true
 
 	_, err := b.api.Send(reply)
