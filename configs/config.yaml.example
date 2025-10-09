@@ -17,3 +17,10 @@ hacker_news:
   max_stories: 10
   max_top_level_comments: 20  # 顶级评论数量限制
   max_child_comments: 5       # 子评论数量限制
+
+logging:
+  enabled: true
+  log_dir: "./logs"
+  max_content_length: 2000  # 故事内容和AI总结的截断长度
+  async_write: true
+  buffer_size: 100

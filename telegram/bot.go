@@ -5,14 +5,16 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"hacker-news-daily/ai"
 	"hacker-news-daily/hackernews"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type Bot struct {
@@ -20,6 +22,7 @@ type Bot struct {
 	chatID         int64
 	aiClient       *ai.Client
 	hnClient       *hackernews.Client
+	logger         interface{}                                    // 使用interface{}避免循环依赖
 	storySummaries map[string]*hackernews.DailySummaryWithNumbers // 按日期存储的故事总结
 	mu             sync.RWMutex                                   // 读写锁保护共享数据
 	messageHandler chan tgbotapi.Update                           // 消息处理通道
@@ -198,10 +201,53 @@ func (b *Bot) SendError(errorMsg string) error {
 	return b.sendMessage(message)
 }
 
-// SetClients 设置AI和Hacker News客户端
-func (b *Bot) SetClients(aiClient *ai.Client, hnClient *hackernews.Client) {
+// SetClients 设置AI、Hacker News客户端和日志记录器
+func (b *Bot) SetClients(aiClient *ai.Client, hnClient *hackernews.Client, logger interface{}) {
 	b.aiClient = aiClient
 	b.hnClient = hnClient
+	b.logger = logger
+}
+
+// logStoryContents 记录故事内容（通过反射调用日志方法）
+func (b *Bot) logStoryContents(date string, stories []hackernews.Story, storyContents []string) {
+	if b.logger == nil {
+		return
+	}
+
+	// 使用反射调用日志方法
+	loggerValue := reflect.ValueOf(b.logger)
+	if loggerValue.Kind() == reflect.Ptr && !loggerValue.IsNil() {
+		method := loggerValue.MethodByName("LogStoryContents")
+		if method.IsValid() {
+			args := []reflect.Value{
+				reflect.ValueOf(date),
+				reflect.ValueOf(stories),
+				reflect.ValueOf(storyContents),
+			}
+			method.Call(args)
+		}
+	}
+}
+
+// logTelegramMessage 记录Telegram消息（通过反射调用日志方法）
+func (b *Bot) logTelegramMessage(date string, title string, storiesText string) {
+	if b.logger == nil {
+		return
+	}
+
+	// 使用反射调用日志方法
+	loggerValue := reflect.ValueOf(b.logger)
+	if loggerValue.Kind() == reflect.Ptr && !loggerValue.IsNil() {
+		method := loggerValue.MethodByName("LogTelegramMessage")
+		if method.IsValid() {
+			args := []reflect.Value{
+				reflect.ValueOf(date),
+				reflect.ValueOf(title),
+				reflect.ValueOf(storiesText),
+			}
+			method.Call(args)
+		}
+	}
 }
 
 // SendDailySummaryWithNumbers 发送带编号的每日总结
@@ -223,6 +269,9 @@ func (b *Bot) SendDailySummaryWithNumbers(summary *hackernews.DailySummaryWithNu
 	}
 
 	storiesText := storiesBuilder.String()
+
+	// 记录Telegram消息到日志
+	b.logTelegramMessage(summary.Date, title, storiesText)
 
 	// 如果消息太长，需要分割发送
 	if len(storiesText) <= maxMessageLength-len(title)-20 {
@@ -470,6 +519,9 @@ func (b *Bot) ProcessDailySummary(date string, maxStories int) error {
 	if len(storyContents) == 0 {
 		return fmt.Errorf("no story content retrieved")
 	}
+
+	// 记录故事内容到日志
+	b.logStoryContents(date, stories, storyContents)
 
 	// 3. 使用 AI 生成带编号的故事总结
 	log.Println("Generating AI summary with numbers...")

@@ -12,6 +12,7 @@ import (
 	"hacker-news-daily/ai"
 	config "hacker-news-daily/configs"
 	"hacker-news-daily/hackernews"
+	"hacker-news-daily/logger"
 	"hacker-news-daily/scheduler"
 	"hacker-news-daily/telegram"
 )
@@ -32,16 +33,31 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// 初始化日志模块
+	loggerConfig := logger.Config{
+		Enabled:          cfg.Logging.Enabled,
+		LogDir:           cfg.Logging.LogDir,
+		MaxContentLength: cfg.Logging.MaxContentLength,
+		AsyncWrite:       cfg.Logging.AsyncWrite,
+		BufferSize:       cfg.Logging.BufferSize,
+	}
+	logInstance, err := logger.NewLogger(loggerConfig)
+	if err != nil {
+		log.Fatalf("Failed to create logger: %v", err)
+	}
+	defer logInstance.Close()
+
 	// 初始化客户端
 	hnClient := hackernews.NewClient(cfg.HackerNews.Timeout, cfg.HackerNews.MaxTopLevelComments, cfg.HackerNews.MaxChildComments)
 	aiClient := ai.NewClient(cfg.AI.BaseURL, cfg.AI.APIKey, cfg.AI.Model, cfg.AI.MaxTokens)
+	aiClient.SetLogger(logInstance)
 	tgBot, err := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID, cfg.Telegram.ProxyURL, cfg.HackerNews.MaxStories)
 	if err != nil {
 		log.Fatalf("Failed to create telegram bot: %v", err)
 	}
 
 	// 设置Telegram机器人的客户端
-	tgBot.SetClients(aiClient, hnClient)
+	tgBot.SetClients(aiClient, hnClient, logInstance)
 
 	// 启动Telegram消息处理器
 	tgBot.StartMessageHandler()

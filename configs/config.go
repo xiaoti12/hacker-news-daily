@@ -17,6 +17,7 @@ type Config struct {
 	Telegram   TelegramConfig   `mapstructure:"telegram"`
 	HackerNews HackerNewsConfig `mapstructure:"hacker_news"`
 	Scheduler  SchedulerConfig  `mapstructure:"scheduler"`
+	Logging    LoggingConfig    `mapstructure:"logging"`
 }
 
 // 全局配置实例和互斥锁
@@ -47,6 +48,14 @@ type HackerNewsConfig struct {
 
 type SchedulerConfig struct {
 	Cron string `mapstructure:"cron"`
+}
+
+type LoggingConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	LogDir           string `mapstructure:"log_dir"`
+	MaxContentLength int    `mapstructure:"max_content_length"`
+	AsyncWrite       bool   `mapstructure:"async_write"`
+	BufferSize       int    `mapstructure:"buffer_size"`
 }
 
 // findProjectRoot 查找项目根目录

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,7 @@ type Client struct {
 	apiKey     string
 	model      string
 	maxTokens  int
+	logger     interface{} // 使用interface{}避免循环依赖
 }
 
 type ChatMessage struct {
@@ -49,6 +51,32 @@ func NewClient(baseURL, apiKey, model string, maxTokens int) *Client {
 		apiKey:     apiKey,
 		model:      model,
 		maxTokens:  maxTokens,
+	}
+}
+
+// SetLogger 设置日志记录器
+func (c *Client) SetLogger(logger interface{}) {
+	c.logger = logger
+}
+
+// logAISummaries 记录AI总结（通过反射调用日志方法）
+func (c *Client) logAISummaries(date string, summaryText string, storyCount int) {
+	if c.logger == nil {
+		return
+	}
+
+	// 使用反射调用日志方法
+	loggerValue := reflect.ValueOf(c.logger)
+	if loggerValue.Kind() == reflect.Ptr && !loggerValue.IsNil() {
+		method := loggerValue.MethodByName("LogAISummaries")
+		if method.IsValid() {
+			args := []reflect.Value{
+				reflect.ValueOf(date),
+				reflect.ValueOf(summaryText),
+				reflect.ValueOf(storyCount),
+			}
+			method.Call(args)
+		}
 	}
 }
 
@@ -214,6 +242,10 @@ func (c *Client) SummarizeStoriesWithNumbers(stories []string, storiesInfo []hac
 
 	// 解析AI返回的带编号总结
 	summaryText := response.Choices[0].Message.Content
+
+	// 记录AI总结到日志
+	c.logAISummaries(date, summaryText, len(stories))
+
 	storySummaries := c.parseNumberedSummaries(summaryText, storiesInfo)
 
 	return &hackernews.DailySummaryWithNumbers{
