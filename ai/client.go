@@ -167,7 +167,7 @@ func (c *Client) SummarizeStoriesWithNumbers(stories []string, storiesInfo []hac
 
 输出要求：
 - 每个故事生成一个独立的段落，段落之间用空行分隔
-- 每个段落以故事编号开头，格式为：[编号] **标题名称**
+- 每个段落以故事编号开头，格式为：[编号] 标题名称
 - 段落内容应该是连贯的文字描述，不使用列表或子标题
 - 内容要有洞察力和可读性，适合技术从业者快速了解
 - 避免政治敏感内容
@@ -289,6 +289,7 @@ URL: %s
 }
 
 // parseNumberedSummaries 解析AI返回的带编号总结
+// TODO 改为每个story并发总结
 func (c *Client) parseNumberedSummaries(summaryText string, stories []hackernews.Story) []hackernews.StoryWithNumber {
 	lines := strings.Split(summaryText, "\n")
 	var storySummaries []hackernews.StoryWithNumber
